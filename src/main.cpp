@@ -146,7 +146,7 @@ void MyChannelGetRequester::getDone(const Status & status,
 			 << " finished, " << status << endl;
 	}
 
-/* Upon success dump the entire request structure to stdout and signal that we are done. */
+/* Upon success dump the entire request structure (with values) to stdout and signal that we are done. */
 	if (status.isSuccess()) {
 		pvStructure->dumpValue(cout);
 		done_event.signal();
@@ -196,9 +196,21 @@ void getValue(string const & channel_name, string const & request, double timeou
 int main (int argc, char ** argv)
 {
 	string prompt("Please enter a channel name: ");
-	string channel_name("PVRubyte");
+	string channel_name("");
 	string request("field(value)");
 	double timeout = 2.0;
+
+	if (argc > 1 && argv[1]) {
+		string arg(argv[1]);
+		if (arg.compare("-d") == 0)
+			debug = true;
+		else {
+			cout << "Unrecognized option '" << arg << "'.\n"
+				 << "Usage: get [-d] \n" 
+				 << "-d : debug\n";
+			return 0;
+		}
+	}
 
 	try {
 	/* Starts the client side pva provider */
