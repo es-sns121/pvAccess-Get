@@ -47,19 +47,23 @@ class MyChannelRequester : public virtual MyRequester, public virtual ChannelReq
 		boolean waitUntilConnected(double timeOut)
 		{
 			boolean result = connect_event.wait(timeOut);
-			if (!result) 
-				cout << "Failed to connect to channel\n";
+			
+			if(!result)
+				cerr << "Channel '" << channel_name << "' failed to connect\n";
+
 			return result;
 		}
 
 	private:
+		string channel_name;
 		Event connect_event;
 };
 
 /* Upon successfuly channel creation, print message */
 void MyChannelRequester::channelCreated(const Status & status, Channel::shared_pointer const & channel)
 {
-	cout << channel->getChannelName() << " created, " << status << endl;
+	channel_name = channel->getChannelName();
+	cout << channel_name << " created, " << status << endl;
 }
 
 /* Upon channel state change, print the channel's current state */
@@ -136,35 +140,40 @@ void MyChannelGetRequester::getDone(const Status & status,
 
 void getValue(string const & channel_name, string const & request, double timeout)
 {
-
-	static shared_ptr<Channel> channel(channelProvider->createChannel(channel_name, channelRequester));
-	static shared_ptr<PVStructure> pvRequest; 
-	static shared_ptr<MyChannelGetRequester> channelGetRequester;
-	static shared_ptr<ChannelGet> channelGet;
+	static string prev_channel("");
+	static shared_ptr<Channel> channel;
 
 /* Request the "pva" channel provider. pva - > pvAccess. as opposed to ca -> channel access */
-	static ChannelProvider::shared_pointer channelProvider = 
+	ChannelProvider::shared_pointer channelProvider = 
 		getChannelProviderRegistry()->getProvider("pva");
 	
 	if (!channelProvider)
 		THROW_EXCEPTION2(runtime_error, "No channel provider");
 
 /* Create a channel requester. This will allow us to create a channel to the pvRecord */
-	static shared_ptr<MyChannelRequester> channelRequester(new MyChannelRequester());
+	shared_ptr<MyChannelRequester> channelRequester(new MyChannelRequester());
 
-/* Create a channel using the channel requester */
-	static shared_ptr<Channel> channel(channelProvider->createChannel(channel_name, channelRequester));
-
-	channelRequester->waitUntilConnected(timeout);
+/* Create a channel using the channel requester. Channels are expensive, so only create a new one
+ * if a new channel name is given.
+ * */
+	if (prev_channel.compare("") == 0 || prev_channel.compare(channel_name) != 0) {
+		
+		channel = channelProvider->createChannel(channel_name, channelRequester);
+		
+		channelRequester->waitUntilConnected(timeout);
+		
+		prev_channel = channel_name;
+	}
+	
 
 /* Create a request structure. This will be filled with the data retrieved from the record. */
-	pvRequest = CreateRequest::create()->createRequest(request);
+	shared_ptr<PVStructure> pvRequest = CreateRequest::create()->createRequest(request);
 	
 /* Create a channelGetRequester. This handles connecting the get, and then notifying upon completion. */
-	channelGetRequester = new MyChannelGetRequester();
+	shared_ptr<MyChannelGetRequester> channelGetRequester(new MyChannelGetRequester());
 
 /* Create a channelGet. This will actually perform the get operation. */
-	channelGet = channel->createChannelGet(channelGetRequester, pvRequest);
+	shared_ptr<ChannelGet> channelGet = channel->createChannelGet(channelGetRequester, pvRequest);
 	
 	channelGetRequester->waitUntilDone(timeout);
 }
@@ -181,8 +190,15 @@ int main (int argc, char ** argv)
 	
 	/* Issue a get request for the specified channel */
 		getValue(channel_name, request, timeout);
+	
+	/* This will reuse the same channel. */
 		getValue(channel_name, request, timeout);
 	
+		channel_name.assign("PVRulong");
+
+	/* This will create a new channel. */
+		getValue(channel_name, request, timeout);
+		
 		ClientFactory::stop();
 
 	} catch (exception &ex) {
