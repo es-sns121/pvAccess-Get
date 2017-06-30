@@ -12,6 +12,8 @@ using namespace std::tr1;
 using namespace epics::pvData;
 using namespace epics::pvAccess;
 
+bool debug = false;
+
 class MyRequester : public virtual Requester
 {
 	public:
@@ -63,15 +65,19 @@ class MyChannelRequester : public virtual MyRequester, public virtual ChannelReq
 void MyChannelRequester::channelCreated(const Status & status, Channel::shared_pointer const & channel)
 {
 	channel_name = channel->getChannelName();
-	cout << channel_name << " created, " << status << endl;
+	if (debug)
+		cout << channel_name << " created, " << status << endl;
 }
 
 /* Upon channel state change, print the channel's current state */
 void MyChannelRequester::channelStateChange(Channel::shared_pointer const & channel, Channel::ConnectionState connectionState)
 {
-	cout << channel->getChannelName() << " state: "
-		 << Channel::ConnectionStateNames[connectionState]
-		 << " (" << connectionState << ") " << endl;
+	if (debug) {
+		cout << channel->getChannelName() << " state: "
+			 << Channel::ConnectionStateNames[connectionState]
+			 << " (" << connectionState << ") " << endl;
+	}
+	
 	if (connectionState == Channel::CONNECTED)
 		connect_event.signal();
 }
@@ -109,16 +115,23 @@ void MyChannelGetRequester::channelGetConnect(const Status & status,
 {
 /* Upon success print a message, dump the request structure (sans values) to sdout, and call get() */
 	if(status.isSuccess()) {
-		cout << "ChannelGet for " << channelGet->getChannel()->getChannelName()
-			 << " connected, " << status << endl;
-		structure->dump(cout);
+		if (debug) {
+			cout << "ChannelGet for " << channelGet->getChannel()->getChannelName()
+				 << " connected, " << status << endl;
+			
+			structure->dump(cout);
+		}
+
 
 		channelGet->get();
 
 /* Otherwise print an error message and signal that we are done. */
 	} else {
-		cout << "ChannelGet for " << channelGet->getChannel()->getChannelName()
-			 << " problem, " << status << endl;
+		if (debug) {
+			cout << "ChannelGet for " << channelGet->getChannel()->getChannelName()
+				 << " problem, " << status << endl;
+		}
+		
 		done_event.signal();
 	}
 }
@@ -128,8 +141,10 @@ void MyChannelGetRequester::getDone(const Status & status,
 			PVStructure::shared_pointer const & pvStructure,
 			BitSet::shared_pointer const & bitSet)
 {
-	cout << "ChannelGet for " << channelGet->getChannel()->getChannelName()
-		 << " finished, " << status << endl;
+	if (debug) {
+		cout << "ChannelGet for " << channelGet->getChannel()->getChannelName()
+			 << " finished, " << status << endl;
+	}
 
 /* Upon success dump the entire request structure to stdout and signal that we are done. */
 	if (status.isSuccess()) {
@@ -180,6 +195,7 @@ void getValue(string const & channel_name, string const & request, double timeou
 
 int main (int argc, char ** argv)
 {
+	string prompt("Please enter a channel name: ");
 	string channel_name("PVRubyte");
 	string request("field(value)");
 	double timeout = 2.0;
@@ -187,18 +203,21 @@ int main (int argc, char ** argv)
 	try {
 	/* Starts the client side pva provider */
 		ClientFactory::start();
-	
-	/* Issue a get request for the specified channel */
-		getValue(channel_name, request, timeout);
-	
-	/* This will reuse the same channel. */
-		getValue(channel_name, request, timeout);
-	
-		channel_name.assign("PVRulong");
-
-	/* This will create a new channel. */
-		getValue(channel_name, request, timeout);
 		
+		cout << prompt;
+		while (cin >> channel_name) {	
+			if (channel_name.compare("exit") == 0)
+				break;
+		
+		/* Issue a get request for the specified channel */	
+			getValue(channel_name, request, timeout);
+					
+			cout << prompt;
+		}
+		
+		if (cin.eof()) 
+			cout << endl;
+
 		ClientFactory::stop();
 
 	} catch (exception &ex) {
